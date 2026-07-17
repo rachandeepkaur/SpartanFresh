@@ -83,9 +83,9 @@ export function UploadPanel({ knownPartners, onUploaded }: Props) {
             </button>
           </div>
           <p className="text-xs text-black/50 dark:text-white/50">
-            Attach a partner&apos;s own spreadsheet (.csv or .xlsx). Columns are matched
-            loosely — item/name, quantity/qty, unit, category, and expiry date are all
-            recognized.
+            Attach the latest inventory snapshot (.csv or .xlsx). Organization,
+            partner, source, location, and last-updated columns are detected
+            automatically; the selection below is used only as a fallback.
           </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -148,6 +148,11 @@ export function UploadPanel({ knownPartners, onUploaded }: Props) {
                 {result.events_ingested} of {result.rows_read} row
                 {result.rows_read === 1 ? "" : "s"} added from {result.filename}
               </p>
+              {result.source_partners.length > 0 && (
+                <p className="text-black/55 dark:text-white/55">
+                  Updated: {result.source_partners.join(", ")}
+                </p>
+              )}
               {result.errors.length > 0 && (
                 <ul className="text-black/55 dark:text-white/55 list-disc list-inside">
                   {result.errors.slice(0, 4).map((e) => (

@@ -7,7 +7,9 @@ export function ExpiringSoonPanel({ items }: { items: ExpiringItem[] }) {
     <div id="expiring" className="rounded-xl border border-black/10 dark:border-white/12 bg-[var(--surface)] p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Expiring Soon</h2>
-        <span className="text-xs text-black/45 dark:text-white/45">Next 7 days</span>
+        <span className="text-xs text-black/45 dark:text-white/45">
+          Auto-updated · Next 7 days
+        </span>
       </div>
 
       {items.length === 0 ? (

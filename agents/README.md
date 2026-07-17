@@ -12,6 +12,20 @@ cp .env.example .env   # GEMINI_API_KEY optional, Supabase vars optional
 uvicorn main:app --reload --port 8000
 ```
 
+To train the optional MQ3 produce-freshness model from the included demo
+workbook, run this once before starting the API:
+
+```bash
+python train_freshness_model.py
+```
+
+The generated `freshness_model.joblib` is loaded automatically. If it is not
+present, produce records continue through the shelf-life fallback.
+
+Dashboard uploads are treated as inventory snapshots: a new upload replaces
+the selected partner's prior upload instead of duplicating it. The dashboard
+also asks the API to recalculate freshness every 30 seconds.
+
 Without `GEMINI_API_KEY`, the translation agent's fallback path
 (pantry intake's dynamic-key format) and brief narration both use
 deterministic/heuristic logic instead of a Gemini call -- the pipeline

@@ -160,11 +160,42 @@ export function expiringSoonItems(
   limit = 6
 ): ExpiringItem[] {
   const eventById = new Map(events.map((e) => [e.id, e]));
-  return [...priorityByEventId.values()]
+  const candidates = [...priorityByEventId.values()]
     .filter((p) => p.estimated_days_remaining != null && p.estimated_days_remaining <= days)
     .sort((a, b) => (a.estimated_days_remaining ?? 0) - (b.estimated_days_remaining ?? 0))
     .map((priority) => ({ priority, event: eventById.get(priority.event_id) }))
-    .filter((x): x is ExpiringItem => Boolean(x.event))
+    .filter((x): x is ExpiringItem => Boolean(x.event));
+
+  // A single item can appear in several partner snapshots. The summary panel
+  // should show one actionable line for matching lots, not repeated rows. Lots
+  // with different remaining time stay separate so an older batch is never
+  // hidden behind a fresher one.
+  const grouped = new Map<string, ExpiringItem>();
+  for (const candidate of candidates) {
+    const remaining = candidate.priority.estimated_days_remaining;
+    const key = [
+      candidate.event.item.trim().toLocaleLowerCase(),
+      candidate.event.unit.trim().toLocaleLowerCase(),
+      remaining?.toFixed(1) ?? "unknown",
+      candidate.priority.urgency,
+    ].join("|");
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        event: candidate.event,
+        priority: { ...candidate.priority },
+      });
+      continue;
+    }
+    existing.priority.quantity += candidate.priority.quantity;
+  }
+
+  return [...grouped.values()]
+    .sort(
+      (a, b) =>
+        (a.priority.estimated_days_remaining ?? 0) -
+        (b.priority.estimated_days_remaining ?? 0)
+    )
     .slice(0, limit);
 }
 

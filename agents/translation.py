@@ -98,12 +98,21 @@ _UNIT_TOKENS = "cans|lbs|gallons|loaves|heads|dozen|bags|cups|blocks"
 _DYNAMIC_KEY_RE = re.compile(rf"^(?P<slug>[a-z_]+)_(?P<unit>{_UNIT_TOKENS})_available$")
 
 _ITEM_CATEGORY_HINTS = {
+    "apple": "produce",
+    "apples": "produce",
+    "banana": "produce",
+    "bananas": "produce",
+    "mango": "produce",
+    "mangoes": "produce",
+    "orange": "produce",
+    "oranges": "produce",
+    "lemon": "produce",
+    "lemons": "produce",
     "beans": "canned",
     "corn": "canned",
     "tomatoes": "produce",
     "lettuce": "produce",
     "strawberries": "produce",
-    "bananas": "produce",
     "milk": "dairy",
     "eggs": "dairy",
     "yogurt": "dairy",
@@ -206,7 +215,22 @@ _UPLOAD_FIELD_ALIASES: dict[str, set[str]] = {
     "unit": {"unit", "units"},
     "category": {"category", "type"},
     "expiry_date": {"expiry_date", "expiry", "expiration", "expiration_date", "use_by", "best_by"},
-    "timestamp": {"date", "timestamp", "reported_date", "ready_date"},
+    "timestamp": {
+        "date",
+        "timestamp",
+        "reported_date",
+        "ready_date",
+        "last_updated",
+        "updated_at",
+    },
+    "source_partner": {
+        "source_partner",
+        "source",
+        "partner",
+        "organization",
+        "organisation",
+        "location",
+    },
 }
 
 _VALID_CATEGORIES = set(Category.__args__)
@@ -244,6 +268,19 @@ def _parse_upload_date(value) -> datetime | None:
         return _parse_iso(text)
     except ValueError:
         return None
+
+
+def _partner_id(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
+
+
+def _upload_source_partner(default: str, raw: dict) -> str:
+    source_key = _find_upload_field(raw, "source_partner")
+    if source_key and raw.get(source_key) not in (None, ""):
+        inferred = _partner_id(raw[source_key])
+        if inferred:
+            return inferred
+    return default
 
 
 def _translate_upload_row(raw: dict) -> dict:
@@ -296,7 +333,7 @@ def translate_upload_row(source_partner: str, raw: dict) -> CanonicalEvent:
     fields = _translate_upload_row(raw)
     return CanonicalEvent(
         id=str(uuid.uuid4()),
-        source_partner=source_partner,
+        source_partner=_upload_source_partner(source_partner, raw),
         raw=raw,
         translated_by="deterministic",
         **fields,

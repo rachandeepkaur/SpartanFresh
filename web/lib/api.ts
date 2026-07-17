@@ -73,6 +73,7 @@ export interface UploadRowError {
 export interface UploadResult {
   filename: string;
   source_partner: string;
+  source_partners: string[];
   rows_read: number;
   events_ingested: number;
   errors: UploadRowError[];

@@ -63,8 +63,17 @@ def seed_demo_data():
         raise HTTPException(500, "No mock partner data found")
 
     result = run_pipeline(raw_records)
-    storage.insert_events([e.model_dump(mode="json") for e in result["events"]])
-    storage.save_briefs([b.model_dump(mode="json") for b in result["briefs"]])
+    event_dicts = [e.model_dump(mode="json") for e in result["events"]]
+    for source_partner in {event["source_partner"] for event in event_dicts}:
+        storage.replace_events_for_source(
+            source_partner,
+            [
+                event
+                for event in event_dicts
+                if event["source_partner"] == source_partner
+            ],
+        )
+    summary = _recompute_from_stored_events()
 
     return {
         "events_ingested": len(result["events"]),
@@ -73,6 +82,7 @@ def seed_demo_data():
             for source in {s for s, _ in raw_records}
         },
         "briefs_generated": [b.partner_id for b in result["briefs"]],
+        **summary,
     }
 
 
@@ -149,13 +159,29 @@ async def upload_inventory_sheet(
         except Exception as exc:
             errors.append({"row": i, "error": str(exc)})
 
+    inferred_sources = sorted({event.source_partner for event in events})
     if events:
-        storage.insert_events([e.model_dump(mode="json") for e in events])
+        event_dicts = [event.model_dump(mode="json") for event in events]
+        for inferred_source in inferred_sources:
+            storage.replace_events_for_source(
+                inferred_source,
+                [
+                    event
+                    for event in event_dicts
+                    if event["source_partner"] == inferred_source
+                ],
+            )
+        # If the UI selection was only a fallback and the sheet identified a
+        # different organization, remove the obsolete snapshot under the
+        # incorrectly selected name.
+        if source_partner not in inferred_sources:
+            storage.replace_events_for_source(source_partner, [])
     summary = _recompute_from_stored_events()
 
     return {
         "filename": filename,
         "source_partner": source_partner,
+        "source_partners": inferred_sources,
         "rows_read": len(rows),
         "events_ingested": len(events),
         "errors": errors,
