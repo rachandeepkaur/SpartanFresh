@@ -28,14 +28,17 @@ app = FastAPI(title="Marathon Kitchen Coordination Platform")
 # Comma-separated list of allowed origins. Defaults to the local dev
 # frontend; in production set this to the deployed frontend URL(s), e.g.
 # ALLOWED_ORIGINS="https://your-app.vercel.app". A single "*" allows all.
-_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+_origins_env = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,https://spartanfresh.vercel.app",
+)
 # Strip trailing slashes: a browser's Origin header never has one, so
 # "https://app.vercel.app/" would silently fail to match otherwise.
 allow_origins = [o.strip().rstrip("/") for o in _origins_env.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[allow_origins],
+    allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
