@@ -8,13 +8,13 @@ described in the root [README](../README.md).
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # ANTHROPIC_API_KEY optional, Supabase vars optional
+cp .env.example .env   # GEMINI_API_KEY optional, Supabase vars optional
 uvicorn main:app --reload --port 8000
 ```
 
-Without `ANTHROPIC_API_KEY`, the translation agent's fallback path
+Without `GEMINI_API_KEY`, the translation agent's fallback path
 (pantry intake's dynamic-key format) and brief narration both use
-deterministic/heuristic logic instead of a Claude call -- the pipeline
+deterministic/heuristic logic instead of a Gemini call -- the pipeline
 still runs end to end.
 
 Without `SUPABASE_URL` / `SUPABASE_SERVICE_KEY`, events and briefs persist
@@ -33,7 +33,7 @@ curl localhost:8000/briefs/spartan_pantry
 
 - `schemas.py` -- canonical Pydantic models shared by every stage
 - `connectors/` -- one reader per partner's mock data format
-- `translation.py` -- deterministic mappers + Claude/heuristic fallback
+- `translation.py` -- deterministic mappers + Gemini/heuristic fallback
 - `freshness.py` -- expiry-date math + shelf-life table
 - `prioritization.py` -- urgency ranking across all partners
 - `briefing.py` -- partner-specific brief generation

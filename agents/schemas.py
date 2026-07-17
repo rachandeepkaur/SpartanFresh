@@ -25,7 +25,7 @@ class CanonicalEvent(BaseModel):
     timestamp: datetime
     expiry_date: Optional[datetime] = None
     raw: dict = Field(default_factory=dict)
-    translated_by: Literal["deterministic", "claude", "heuristic"] = "deterministic"
+    translated_by: Literal["deterministic", "gemini", "heuristic"] = "deterministic"
 
 
 class FreshnessTag(BaseModel):
@@ -33,7 +33,7 @@ class FreshnessTag(BaseModel):
     item: str
     estimated_days_remaining: Optional[float] = None
     confidence: Literal["high", "medium", "low"]
-    method: Literal["expiry_date", "claude_vision", "shelf_life_table"]
+    method: Literal["expiry_date", "gemini_vision", "shelf_life_table"]
     urgency: Urgency
 
 

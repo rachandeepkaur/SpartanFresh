@@ -8,7 +8,7 @@ Two briefs for the MVP (README section 9 minimum):
     to act on before it turns.
 
 Narrative text is template-based by default (free, deterministic, good
-enough for a demo). If ANTHROPIC_API_KEY is set, it asks Claude to phrase it
+enough for a demo). If GEMINI_API_KEY is set, it asks Gemini to phrase it
 more naturally instead, falling back to the template on any failure.
 """
 
@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 
 from schemas import Brief, PriorityEntry
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 
 PARTNER_LABELS = {
     "marathon_kitchen_internal": "Marathon Kitchen -- Internal",
@@ -47,37 +48,31 @@ def _template_narrative(partner_label: str, items: list[PriorityEntry]) -> str:
     return "\n".join(lines)
 
 
-def _claude_narrative(partner_label: str, items: list[PriorityEntry]) -> str:
-    import anthropic
+def _gemini_narrative(partner_label: str, items: list[PriorityEntry]) -> str:
+    from google import genai
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY)
     item_lines = "\n".join(
         f"- {e.item}: {e.quantity:g} {e.unit} from {e.source_partner}, "
         f"urgency={e.urgency}, days_remaining={e.estimated_days_remaining}"
         for e in items
     )
-    message = client.messages.create(
-        model="claude-sonnet-5",
-        max_tokens=300,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Write a short (3-5 sentence), plain, action-oriented brief for "
-                    f"{partner_label} based on this ranked inventory. Lead with the "
-                    f"most urgent items. No headers, no bullet points, just prose.\n\n"
-                    f"{item_lines}"
-                ),
-            }
-        ],
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            f"Write a short (3-5 sentence), plain, action-oriented brief for "
+            f"{partner_label} based on this ranked inventory. Lead with the "
+            f"most urgent items. No headers, no bullet points, just prose.\n\n"
+            f"{item_lines}"
+        ),
     )
-    return message.content[0].text.strip()
+    return response.text.strip()
 
 
 def _narrative(partner_label: str, items: list[PriorityEntry]) -> str:
-    if ANTHROPIC_API_KEY and items:
+    if GEMINI_API_KEY and items:
         try:
-            return _claude_narrative(partner_label, items)
+            return _gemini_narrative(partner_label, items)
         except Exception:
             pass
     return _template_narrative(partner_label, items)

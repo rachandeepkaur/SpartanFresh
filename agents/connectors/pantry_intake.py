@@ -4,7 +4,7 @@
 The key name embeds the item and unit, and changes per record -- there's no
 stable field name to map deterministically. This is the format the
 translation agent can't handle with a lookup table, so it falls back to the
-Claude (or heuristic) translator. See translation.py.
+Gemini (or heuristic) translator. See translation.py.
 """
 
 import json

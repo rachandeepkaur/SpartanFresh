@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next *)",
+      "Bash(curl -s localhost:8000/health)",
+      "Bash(nohup npm run dev)",
+      "Bash(echo \"started $!\")",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-shraddhapatel-Documents-SpartanFresh/663a5b51-5cf0-4339-96c7-8789c6d0cf06/scratchpad)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s localhost:3000/ -o /private/tmp/claude-501/-Users-shraddhapatel-Documents-SpartanFresh/663a5b51-5cf0-4339-96c7-8789c6d0cf06/scratchpad/index.html)"
+    ]
+  }
+}

@@ -4,8 +4,8 @@ CanonicalEvent schema.
 Known, stable formats (spartan_garden, community_donor) get a deterministic
 mapping table -- fast, free, no model call. The pantry intake log uses a
 different, dynamic key per item (see connectors/pantry_intake.py) so it
-can't be handled by a lookup table; that falls back to a Claude call, and
-if no ANTHROPIC_API_KEY is configured, to a regex-based heuristic that
+can't be handled by a lookup table; that falls back to a Gemini call, and
+if no GEMINI_API_KEY is configured, to a regex-based heuristic that
 mimics what the model call would produce so the pipeline still runs
 end-to-end offline.
 """
@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 
 from schemas import CanonicalEvent
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 
 # ---------------------------------------------------------------------------
 # Partner A: Spartan Garden sheet (Crop, Lbs_Ready, Ready_Date) -- deterministic
@@ -90,7 +91,7 @@ DETERMINISTIC_MAPPERS = {
 
 # ---------------------------------------------------------------------------
 # Partner C: pantry intake log -- dynamic key per item, no stable schema.
-# Claude fallback (or heuristic mimic when no API key is configured).
+# Gemini fallback (or heuristic mimic when no API key is configured).
 # ---------------------------------------------------------------------------
 
 _UNIT_TOKENS = "cans|lbs|gallons|loaves|heads|dozen|bags|cups|blocks"
@@ -116,7 +117,7 @@ _ITEM_CATEGORY_HINTS = {
 
 
 def _heuristic_translate_dynamic(raw: dict) -> dict:
-    """Regex-based stand-in for the Claude fallback, used when no API key
+    """Regex-based stand-in for the Gemini fallback, used when no API key
     is configured. Finds the `<item>_<unit>_available` key and infers
     category from a small hint table."""
     date_str = raw.get("date")
@@ -139,7 +140,7 @@ def _heuristic_translate_dynamic(raw: dict) -> dict:
     }
 
 
-_CLAUDE_TRANSLATION_PROMPT = """You translate raw inventory records from unfamiliar \
+_GEMINI_TRANSLATION_PROMPT = """You translate raw inventory records from unfamiliar \
 partner formats into a canonical schema.
 
 Canonical fields: item (str), quantity (float), unit (str), category (one of \
@@ -151,22 +152,16 @@ Raw record: {raw}
 Respond with ONLY a JSON object with exactly those keys, no prose."""
 
 
-def _claude_translate_dynamic(raw: dict) -> dict:
-    import anthropic
+def _gemini_translate_dynamic(raw: dict) -> dict:
+    from google import genai
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model="claude-sonnet-5",
-        max_tokens=300,
-        messages=[
-            {
-                "role": "user",
-                "content": _CLAUDE_TRANSLATION_PROMPT.format(raw=json.dumps(raw)),
-            }
-        ],
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=_GEMINI_TRANSLATION_PROMPT.format(raw=json.dumps(raw)),
     )
-    text = message.content[0].text.strip()
-    text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
+    text = response.text.strip()
+    text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
     parsed = json.loads(text)
     parsed["timestamp"] = datetime.fromisoformat(parsed["timestamp"])
     parsed["expiry_date"] = (
@@ -176,11 +171,11 @@ def _claude_translate_dynamic(raw: dict) -> dict:
 
 
 def _translate_unrecognized(raw: dict) -> tuple[dict, str]:
-    """Try Claude first when configured; always have the heuristic as a
+    """Try Gemini first when configured; always have the heuristic as a
     safety net so a flaky or unconfigured model call never breaks the demo."""
-    if ANTHROPIC_API_KEY:
+    if GEMINI_API_KEY:
         try:
-            return _claude_translate_dynamic(raw), "claude"
+            return _gemini_translate_dynamic(raw), "gemini"
         except Exception:
             pass
     return _heuristic_translate_dynamic(raw), "heuristic"

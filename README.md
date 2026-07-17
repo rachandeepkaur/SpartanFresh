@@ -67,7 +67,7 @@ The translation agent maps all of these onto one canonical event shape:
 ```
 
 Known, stable partner formats get a deterministic mapping table (fast, free,
-no model call). Unfamiliar or changed formats fall back to a Claude call that
+no model call). Unfamiliar or changed formats fall back to a Gemini call that
 maps fields onto the canonical schema. Every event, regardless of source,
 ends up in one table: `unified_inventory_events`.
 
@@ -113,7 +113,7 @@ Upstream sources (garden, donors, drives)
 **Translation agent**
 - Input: raw record from any connector, in its native format
 - Output: one canonical event (see schema above)
-- Logic: check deterministic mapping table first; only call Claude for
+- Logic: check deterministic mapping table first; only call Gemini for
   unrecognized shapes
 
 **Forecast agent**
@@ -126,7 +126,7 @@ Upstream sources (garden, donors, drives)
 - Input: newly logged inbound item (photo for produce, printed date for
   packaged/canned/frozen/milk)
 - Output: `{item, estimated_days_remaining, confidence}`
-- Logic: OCR for anything with a printed date; Claude vision classification
+- Logic: OCR for anything with a printed date; Gemini vision classification
   (fresh / use soon / spoiling) for produce with no printed date
 
 **Prioritization agent**
@@ -184,7 +184,7 @@ Upstream sources (garden, donors, drives)
 - **Agents/orchestration:** LangGraph + FastAPI, deployed on Railway/Render
 - **Model (for future):** Fine-tune on the mq3 dataset to handle both the
   freshness tagging and the translation-agent fallback for unrecognized
-  formats. Until that exists, both fall back to Claude API calls.
+  formats. Until that exists, both fall back to Gemini API calls.
 - **Database:** Supabase (Postgres) -- `unified_inventory_events`,
   `partners`, `briefs`, `outcomes` tables
 - **Connectors:** Google Sheets API / form webhooks per partner source, kept
@@ -201,7 +201,7 @@ marathon-kitchen-platform/
 │   ├── graph.py            # pipeline: translate -> forecast/freshness -> prioritize -> brief
 │   ├── main.py
 │   ├── connectors/         # one adapter per partner data source
-│   └── prompts/            # Claude prompts (translation, freshness, briefing)
+│   └── prompts/            # Gemini prompts (translation, freshness, briefing)
 ├── docs/                   # pitch materials, theme mapping, partner interview notes
 └── README.md
 ```
@@ -233,7 +233,7 @@ See [agents/README.md](agents/README.md) for the backend service and
 cd agents
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in ANTHROPIC_API_KEY; Supabase vars optional
+cp .env.example .env   # fill in GEMINI_API_KEY; Supabase vars optional
 uvicorn main:app --reload --port 8000
 
 # Frontend (Next.js dashboard)

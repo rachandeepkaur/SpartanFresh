@@ -5,7 +5,7 @@ Two paths:
      donor items) -> compute days remaining directly. High confidence.
   2. No printed date (garden produce, pantry-logged fresh items) -> look up
      a typical shelf-life for that item. A real deployment would show a
-     photo to Claude's vision here for a condition read (fresh / use soon /
+     photo to Gemini's vision here for a condition read (fresh / use soon /
      spoiling); without an actual photo in the mock data, this MVP uses a
      shelf-life table as the offline stand-in, which is the same interface
      a vision call would fill in later. Medium confidence.

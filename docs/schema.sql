@@ -23,7 +23,7 @@ create table if not exists unified_inventory_events (
     timestamp timestamptz not null,
     expiry_date timestamptz,
     raw jsonb not null default '{}',
-    translated_by text not null check (translated_by in ('deterministic', 'claude', 'heuristic')),
+    translated_by text not null check (translated_by in ('deterministic', 'gemini', 'heuristic')),
     created_at timestamptz not null default now()
 );
 
