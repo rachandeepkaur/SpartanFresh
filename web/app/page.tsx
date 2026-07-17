@@ -7,6 +7,7 @@ import {
   PriorityEntry,
   fetchBriefs,
   fetchEvents,
+  refreshPipeline,
   seedDemoData,
 } from "@/lib/api";
 import {
@@ -37,6 +38,7 @@ import { Icon } from "@/components/icons";
 const KNOWN_PARTNER_IDS = ["spartan_garden", "community_donor", "spartan_pantry_intake"];
 const TOTAL_CONFIGURED_PARTNERS = KNOWN_PARTNER_IDS.length;
 const TICK_INTERVAL_MS = 1_000;
+const AUTO_REFRESH_INTERVAL_MS = 30_000;
 const BELL_PULSE_MS = 2_500;
 
 export default function DashboardPage() {
@@ -46,11 +48,13 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
+  const [itemSearch, setItemSearch] = useState("");
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent = false, recompute = false) => {
     if (!silent) setLoading(true);
     setError(null);
     try {
+      if (recompute) await refreshPipeline();
       const [nextEvents, nextBriefs] = await Promise.all([fetchEvents(), fetchBriefs()]);
       setEvents(nextEvents);
       setBriefs(nextBriefs);
@@ -67,8 +71,16 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const initial = setTimeout(() => load(), 0);
+    const initial = setTimeout(() => load(false, true), 0);
     return () => clearTimeout(initial);
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = setInterval(
+      () => void load(true, true),
+      AUTO_REFRESH_INTERVAL_MS
+    );
+    return () => clearInterval(refresh);
   }, [load]);
 
   useEffect(() => {
@@ -94,6 +106,14 @@ export default function DashboardPage() {
     internal?.items.forEach((entry) => map.set(entry.event_id, entry));
     return map;
   }, [briefs]);
+
+  const filteredInventory = useMemo(() => {
+    const query = itemSearch.trim().toLocaleLowerCase();
+    if (!query) return events;
+    return events.filter((event) =>
+      event.item.toLocaleLowerCase().includes(query)
+    );
+  }, [events, itemSearch]);
 
   const inbound = useMemo(() => sumByDirection(events, "inbound"), [events]);
   const outbound = useMemo(() => sumByDirection(events, "outbound"), [events]);
@@ -181,7 +201,7 @@ export default function DashboardPage() {
           lastUpdated={lastUpdated}
           now={now}
           loading={loading}
-          onRefresh={() => load()}
+          onRefresh={() => load(false, true)}
           onSeed={handleSeed}
           showSeed={events.length === 0}
           knownPartners={knownPartners}
@@ -291,10 +311,37 @@ export default function DashboardPage() {
 
           {events.length > 0 && (
             <section id="inventory-data" className="flex flex-col gap-3">
-              <h2 className="font-semibold">
-                Full inventory ({events.length} item{events.length === 1 ? "" : "s"})
-              </h2>
-              <EventsTable events={events} priorityByEventId={priorityByEventId} />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="font-semibold">
+                  Full inventory ({filteredInventory.length}
+                  {itemSearch.trim() ? ` of ${events.length}` : ""} item
+                  {filteredInventory.length === 1 ? "" : "s"})
+                </h2>
+                <div className="relative w-full sm:w-80">
+                  <input
+                    type="search"
+                    value={itemSearch}
+                    onChange={(event) => setItemSearch(event.target.value)}
+                    placeholder="Search by item name…"
+                    aria-label="Search inventory by item name"
+                    className="w-full rounded-lg border border-black/15 dark:border-white/20 bg-[var(--surface)] px-3 py-2 pr-9 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                  {itemSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setItemSearch("")}
+                      aria-label="Clear item search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-black/40 hover:text-black/70 dark:text-white/40 dark:hover:text-white/70"
+                    >
+                      <Icon name="x" className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <EventsTable
+                events={filteredInventory}
+                priorityByEventId={priorityByEventId}
+              />
             </section>
           )}
         </main>

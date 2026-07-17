@@ -33,7 +33,12 @@ class FreshnessTag(BaseModel):
     item: str
     estimated_days_remaining: Optional[float] = None
     confidence: Literal["high", "medium", "low"]
-    method: Literal["expiry_date", "gemini_vision", "shelf_life_table"]
+    method: Literal[
+        "expiry_date",
+        "gemini_vision",
+        "mq3_ethylene_model",
+        "shelf_life_table",
+    ]
     urgency: Urgency
 
 

@@ -29,6 +29,16 @@ export function EventsTable({ events, priorityByEventId }: Props) {
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 && (
+            <tr className="border-t border-black/10 dark:border-white/15">
+              <td
+                colSpan={8}
+                className="px-3 py-8 text-center text-black/50 dark:text-white/50"
+              >
+                No inventory items match that search.
+              </td>
+            </tr>
+          )}
           {rows.map((event) => {
             const priority = priorityByEventId.get(event.id);
             return (

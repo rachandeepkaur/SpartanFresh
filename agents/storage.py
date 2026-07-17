@@ -61,6 +61,43 @@ def insert_events(events: list[dict[str, Any]]) -> None:
         _write_local(store)
 
 
+def replace_events_for_source(
+    source_partner: str, events: list[dict[str, Any]]
+) -> None:
+    """Replace one partner's inventory snapshot with its latest upload.
+
+    Spreadsheet uploads describe current inventory, unlike ``/ingest`` events
+    which are an append-only activity stream. Replacing the previous snapshot
+    prevents every upload or demo seed from duplicating the same stock.
+    """
+    wrong_source = [
+        event.get("id", "<unknown>")
+        for event in events
+        if event.get("source_partner") != source_partner
+    ]
+    if wrong_source:
+        raise ValueError(
+            f"Events do not belong to source {source_partner!r}: "
+            + ", ".join(wrong_source)
+        )
+
+    if _supabase_client:
+        table = _supabase_client.table("unified_inventory_events")
+        table.delete().eq("source_partner", source_partner).execute()
+        if events:
+            table.insert(events).execute()
+        return
+
+    with _lock:
+        store = _read_local()
+        store["unified_inventory_events"] = [
+            event
+            for event in store["unified_inventory_events"]
+            if event.get("source_partner") != source_partner
+        ] + events
+        _write_local(store)
+
+
 def list_events() -> list[dict[str, Any]]:
     if _supabase_client:
         res = _supabase_client.table("unified_inventory_events").select("*").execute()
