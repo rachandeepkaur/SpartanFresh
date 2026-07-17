@@ -64,3 +64,36 @@ export const refreshPipeline = () =>
   request<{ event_count: number; brief_count: number }>("/pipeline/refresh", {
     method: "POST",
   });
+
+export interface UploadRowError {
+  row: number;
+  error: string;
+}
+
+export interface UploadResult {
+  filename: string;
+  source_partner: string;
+  rows_read: number;
+  events_ingested: number;
+  errors: UploadRowError[];
+  event_count: number;
+  brief_count: number;
+}
+
+export async function uploadInventorySheet(
+  file: File,
+  sourcePartner: string
+): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("source_partner", sourcePartner);
+  const res = await fetch(`${API_BASE}/uploads`, { method: "POST", body: form });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((body) => body?.detail)
+      .catch(() => null);
+    throw new Error(detail || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}

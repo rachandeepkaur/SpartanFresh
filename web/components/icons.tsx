@@ -26,7 +26,9 @@ export type IconName =
   | "leaf"
   | "package"
   | "sparkles"
-  | "check-circle";
+  | "check-circle"
+  | "upload"
+  | "x";
 
 const PATHS: Record<IconName, ReactNode> = {
   grid: (
@@ -194,6 +196,13 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M7.5 12.5l3 3 6-6.5" />
     </>
   ),
+  upload: (
+    <>
+      <path d="M12 15.5V4M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M4.5 15.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
+  x: <path d="M6 6l12 12M18 6L6 18" />,
 };
 
 export function Icon({

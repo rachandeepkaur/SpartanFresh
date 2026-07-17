@@ -16,9 +16,9 @@ import json
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from schemas import CanonicalEvent
+from schemas import Category, CanonicalEvent
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
@@ -152,6 +152,15 @@ Raw record: {raw}
 Respond with ONLY a JSON object with exactly those keys, no prose."""
 
 
+def _parse_iso(value: str) -> datetime:
+    """datetime.fromisoformat on Python <3.11 can't parse a trailing 'Z'
+    (Gemini's default timestamp format), so normalize it to +00:00 first.
+    Gemini also doesn't always include a timezone at all -- assume UTC for
+    the ones that don't, since every other stage compares tz-aware datetimes."""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def _gemini_translate_dynamic(raw: dict) -> dict:
     from google import genai
 
@@ -163,9 +172,10 @@ def _gemini_translate_dynamic(raw: dict) -> dict:
     text = response.text.strip()
     text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
     parsed = json.loads(text)
-    parsed["timestamp"] = datetime.fromisoformat(parsed["timestamp"])
+    parsed["item"] = parsed["item"].strip().title()
+    parsed["timestamp"] = _parse_iso(parsed["timestamp"])
     parsed["expiry_date"] = (
-        datetime.fromisoformat(parsed["expiry_date"]) if parsed.get("expiry_date") else None
+        _parse_iso(parsed["expiry_date"]) if parsed.get("expiry_date") else None
     )
     return parsed
 
@@ -179,6 +189,118 @@ def _translate_unrecognized(raw: dict) -> tuple[dict, str]:
         except Exception:
             pass
     return _heuristic_translate_dynamic(raw), "heuristic"
+
+
+# ---------------------------------------------------------------------------
+# Dashboard uploads: a program manager attaches a partner's own spreadsheet
+# (csv/xlsx) instead of a code connector reading it automatically. Column
+# names are matched loosely (case/spacing-insensitive) against a few aliases
+# per canonical field, rather than requiring one exact template -- the same
+# flexibility the deterministic mappers above give each known partner, just
+# driven by headers instead of a hardcoded key.
+# ---------------------------------------------------------------------------
+
+_UPLOAD_FIELD_ALIASES: dict[str, set[str]] = {
+    "item": {"item", "name", "product", "crop", "item_name"},
+    "quantity": {"quantity", "qty", "amount", "lbs_ready"},
+    "unit": {"unit", "units"},
+    "category": {"category", "type"},
+    "expiry_date": {"expiry_date", "expiry", "expiration", "expiration_date", "use_by", "best_by"},
+    "timestamp": {"date", "timestamp", "reported_date", "ready_date"},
+}
+
+_VALID_CATEGORIES = set(Category.__args__)
+_UPLOAD_DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y")
+
+
+def _normalize_header(key: str) -> str:
+    return re.sub(r"[\s_]+", "_", str(key).strip().lower())
+
+
+def _find_upload_field(row: dict, field: str) -> str | None:
+    aliases = _UPLOAD_FIELD_ALIASES[field]
+    for key in row:
+        if _normalize_header(key) in aliases:
+            return key
+    return None
+
+
+def _parse_upload_date(value) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in _UPLOAD_DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    try:
+        return _parse_iso(text)
+    except ValueError:
+        return None
+
+
+def _translate_upload_row(raw: dict) -> dict:
+    item_key = _find_upload_field(raw, "item")
+    qty_key = _find_upload_field(raw, "quantity")
+    if not item_key or raw.get(item_key) in (None, ""):
+        raise ValueError("missing an item/name/crop column")
+    if not qty_key or raw.get(qty_key) in (None, ""):
+        raise ValueError("missing a quantity/qty/amount column")
+
+    item = str(raw[item_key]).strip()
+    quantity = float(raw[qty_key])
+    if not item:
+        raise ValueError("item name is empty")
+    if quantity <= 0:
+        raise ValueError(f"quantity must be positive, got {quantity!r}")
+
+    unit_key = _find_upload_field(raw, "unit")
+    unit = str(raw[unit_key]).strip() if unit_key and raw.get(unit_key) not in (None, "") else "units"
+
+    category_key = _find_upload_field(raw, "category")
+    category = str(raw[category_key]).strip().lower() if category_key and raw.get(category_key) else ""
+    if category not in _VALID_CATEGORIES:
+        category = _ITEM_CATEGORY_HINTS.get(_normalize_header(item), "other")
+
+    expiry_key = _find_upload_field(raw, "expiry_date")
+    expiry_date = _parse_upload_date(raw[expiry_key]) if expiry_key else None
+
+    timestamp_key = _find_upload_field(raw, "timestamp")
+    timestamp = (_parse_upload_date(raw[timestamp_key]) if timestamp_key else None) or datetime.now(
+        timezone.utc
+    )
+
+    return {
+        "item": item,
+        "quantity": quantity,
+        "unit": unit,
+        "category": category,
+        "direction": "inbound",
+        "timestamp": timestamp,
+        "expiry_date": expiry_date,
+    }
+
+
+def translate_upload_row(source_partner: str, raw: dict) -> CanonicalEvent:
+    """Translate one row of a dashboard-uploaded spreadsheet. Raises
+    ValueError with a human-readable reason for rows that can't be mapped,
+    so the caller can report per-row errors instead of failing the whole
+    upload on one bad line."""
+    fields = _translate_upload_row(raw)
+    return CanonicalEvent(
+        id=str(uuid.uuid4()),
+        source_partner=source_partner,
+        raw=raw,
+        translated_by="deterministic",
+        **fields,
+    )
 
 
 # ---------------------------------------------------------------------------

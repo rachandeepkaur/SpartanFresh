@@ -1,17 +1,32 @@
 import { Icon } from "./icons";
 import { timeAgo } from "@/lib/dashboard";
+import { UploadPanel } from "./UploadPanel";
 
 interface Props {
   alertCount: number;
+  bellPulse: boolean;
   lastUpdated: string | null;
   now: Date;
   loading: boolean;
   onRefresh: () => void;
   onSeed: () => void;
   showSeed: boolean;
+  knownPartners: { id: string; label: string }[];
+  onUploaded: () => void;
 }
 
-export function Topbar({ alertCount, lastUpdated, now, loading, onRefresh, onSeed, showSeed }: Props) {
+export function Topbar({
+  alertCount,
+  bellPulse,
+  lastUpdated,
+  now,
+  loading,
+  onRefresh,
+  onSeed,
+  showSeed,
+  knownPartners,
+  onUploaded,
+}: Props) {
   const today = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
@@ -46,6 +61,8 @@ export function Topbar({ alertCount, lastUpdated, now, loading, onRefresh, onSee
           </span>
         </button>
 
+        <UploadPanel knownPartners={knownPartners} onUploaded={onUploaded} />
+
         <div className="hidden md:flex items-center gap-2 rounded-md border border-black/15 dark:border-white/20 px-3 py-2 text-sm text-black/70 dark:text-white/70">
           <Icon name="calendar" className="w-4 h-4" />
           {today}
@@ -57,8 +74,13 @@ export function Topbar({ alertCount, lastUpdated, now, loading, onRefresh, onSee
         >
           <Icon name="bell" className="w-4.5 h-4.5" />
           {alertCount > 0 && (
-            <span className="absolute -top-1 -right-1 rounded-full bg-red-500 text-white text-[10px] font-semibold min-w-[16px] h-4 px-1 flex items-center justify-center">
-              {alertCount}
+            <span className="absolute -top-1 -right-1 flex">
+              {bellPulse && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+              )}
+              <span className="relative rounded-full bg-red-500 text-white text-[10px] font-semibold min-w-[16px] h-4 px-1 flex items-center justify-center">
+                {alertCount}
+              </span>
             </span>
           )}
         </button>

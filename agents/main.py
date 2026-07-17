@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+
+load_dotenv()  # must run before importing modules that read env vars at import time
+
+import csv
+import io
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -13,7 +20,7 @@ from briefing import generate_briefs
 from graph import run_pipeline
 from prioritization import prioritize
 from schemas import CanonicalEvent
-from translation import translate
+from translation import translate, translate_upload_row
 
 app = FastAPI(title="Marathon Kitchen Coordination Platform")
 
@@ -82,6 +89,78 @@ def ingest(request: IngestRequest):
 def refresh_pipeline():
     """Recompute freshness/priority/briefs from whatever is currently stored."""
     return _recompute_from_stored_events()
+
+
+def _rows_from_csv_bytes(content: bytes) -> list[dict]:
+    text = content.decode("utf-8-sig")
+    return [row for row in csv.DictReader(io.StringIO(text)) if any(row.values())]
+
+
+def _rows_from_xlsx_bytes(content: bytes) -> list[dict]:
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(io.BytesIO(content), data_only=True, read_only=True)
+    sheet = workbook.active
+    rows = sheet.iter_rows(values_only=True)
+    try:
+        headers = [str(h).strip() if h is not None else "" for h in next(rows)]
+    except StopIteration:
+        return []
+    result = []
+    for row in rows:
+        if all(v is None for v in row):
+            continue
+        result.append({headers[i]: row[i] for i in range(len(headers)) if headers[i]})
+    return result
+
+
+@app.post("/uploads")
+async def upload_inventory_sheet(
+    file: UploadFile = File(...),
+    source_partner: str = Form(...),
+):
+    """A program manager attaches a partner's own spreadsheet (csv/xlsx) as
+    a manual stand-in for a live connector. Each row is translated with the
+    same canonical schema every other source lands in, so it flows through
+    freshness/prioritization/briefing exactly like seeded or /ingest data."""
+    source_partner = source_partner.strip()
+    if not source_partner:
+        raise HTTPException(400, "source_partner is required")
+
+    filename = file.filename or "upload"
+    suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    content = await file.read()
+
+    if suffix == "csv":
+        rows = _rows_from_csv_bytes(content)
+    elif suffix in ("xlsx", "xlsm"):
+        rows = _rows_from_xlsx_bytes(content)
+    else:
+        raise HTTPException(400, "Only .csv or .xlsx files are supported")
+
+    if not rows:
+        raise HTTPException(400, "No data rows found in the uploaded file")
+
+    events: list[CanonicalEvent] = []
+    errors: list[dict] = []
+    for i, row in enumerate(rows, start=2):  # header is row 1
+        try:
+            events.append(translate_upload_row(source_partner, row))
+        except Exception as exc:
+            errors.append({"row": i, "error": str(exc)})
+
+    if events:
+        storage.insert_events([e.model_dump(mode="json") for e in events])
+    summary = _recompute_from_stored_events()
+
+    return {
+        "filename": filename,
+        "source_partner": source_partner,
+        "rows_read": len(rows),
+        "events_ingested": len(events),
+        "errors": errors,
+        **summary,
+    }
 
 
 @app.get("/events")

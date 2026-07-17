@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brief,
   CanonicalEvent,
@@ -15,6 +15,7 @@ import {
   expiringSoonItems,
   formatQuantity,
   netQuantity,
+  partnerLabel,
   partnerVisual,
   recentEvents,
   sourceBreakdown,
@@ -32,9 +33,11 @@ import { BriefCard } from "@/components/BriefCard";
 import { EventsTable } from "@/components/EventsTable";
 import { Icon } from "@/components/icons";
 
-const TOTAL_CONFIGURED_PARTNERS = 3; // spartan_garden, community_donor, spartan_pantry_intake
-const POLL_INTERVAL_MS = 20_000;
+// Mirrors agents/connectors/__init__.py's CONNECTORS dict.
+const KNOWN_PARTNER_IDS = ["spartan_garden", "community_donor", "spartan_pantry_intake"];
+const TOTAL_CONFIGURED_PARTNERS = KNOWN_PARTNER_IDS.length;
 const TICK_INTERVAL_MS = 1_000;
+const BELL_PULSE_MS = 2_500;
 
 export default function DashboardPage() {
   const [events, setEvents] = useState<CanonicalEvent[]>([]);
@@ -65,11 +68,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const initial = setTimeout(() => load(), 0);
-    const poll = setInterval(() => load(true), POLL_INTERVAL_MS);
-    return () => {
-      clearTimeout(initial);
-      clearInterval(poll);
-    };
+    return () => clearTimeout(initial);
   }, [load]);
 
   useEffect(() => {
@@ -111,6 +110,35 @@ export default function DashboardPage() {
     () => deriveAlerts(events, priorityByEventId, lastUpdated ?? new Date().toISOString()),
     [events, priorityByEventId, lastUpdated]
   );
+
+  // Purely cosmetic: a brief pulse on the bell badge when a later refresh
+  // (e.g. an upload) surfaces a new alert — suppressed on the very first
+  // data load, since that's not "new," just initial. Doesn't touch alert
+  // derivation itself.
+  const [bellPulse, setBellPulse] = useState(false);
+  const prevAlertCount = useRef(0);
+  const hasLoadedOnce = useRef(false);
+  useEffect(() => {
+    if (!hasLoadedOnce.current) {
+      hasLoadedOnce.current = lastUpdated !== null;
+      prevAlertCount.current = alerts.length;
+      return;
+    }
+    const grew = alerts.length > prevAlertCount.current;
+    prevAlertCount.current = alerts.length;
+    if (!grew) return;
+    const start = setTimeout(() => setBellPulse(true), 0);
+    const stop = setTimeout(() => setBellPulse(false), BELL_PULSE_MS);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(stop);
+    };
+  }, [alerts.length, lastUpdated]);
+
+  const knownPartners = useMemo(() => {
+    const ids = new Set([...KNOWN_PARTNER_IDS, ...events.map((e) => e.source_partner)]);
+    return [...ids].map((id) => ({ id, label: partnerLabel(id) }));
+  }, [events]);
   const sources = useMemo(
     () =>
       sourceBreakdown(events).map((s) => {
@@ -149,12 +177,15 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar
           alertCount={alerts.length}
+          bellPulse={bellPulse}
           lastUpdated={lastUpdated}
           now={now}
           loading={loading}
           onRefresh={() => load()}
           onSeed={handleSeed}
           showSeed={events.length === 0}
+          knownPartners={knownPartners}
+          onUploaded={() => load()}
         />
 
         <main id="overview" className="flex flex-col gap-6 p-6 lg:p-8 w-full max-w-[1400px] mx-auto">
@@ -210,7 +241,7 @@ export default function DashboardPage() {
             <InventorySnapshotPanel
               events={events}
               partnersReporting={partnersReporting}
-              totalPartners={TOTAL_CONFIGURED_PARTNERS}
+              totalPartners={Math.max(TOTAL_CONFIGURED_PARTNERS, partnersReporting)}
               lastUpdated={lastUpdated}
               now={now}
             />
