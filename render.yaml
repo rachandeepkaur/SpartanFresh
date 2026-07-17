@@ -1,0 +1,27 @@
+# Render blueprint for the FastAPI backend (agents/).
+# Deploy: Render Dashboard -> New -> Blueprint -> pick this repo.
+# The frontend is deployed separately on Vercel (see DEPLOYMENT.md).
+services:
+  - type: web
+    name: spartanfresh-api
+    runtime: docker
+    dockerfilePath: ./agents/Dockerfile
+    dockerContext: ./agents
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Set this to your Vercel frontend URL once it's deployed, e.g.
+      # https://spartanfresh.vercel.app  (comma-separate multiple origins).
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Optional: enables the Gemini translation/briefing paths.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-flash-latest
+      # Optional: switch persistence from local JSON to Supabase.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
